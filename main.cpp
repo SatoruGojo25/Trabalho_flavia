@@ -1,226 +1,245 @@
-#include <iostream>
-#include <fstream>
-#include <cstdio>
-#include <cstring>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
-using namespace std;
 
-// ==========================================================
-// 1. ESTRUTURA DE DADOS (STRUCT)
-// Representa o registro principal (Mídia: Filme/Série).
-// Três campos de tipos diferentes: char[], char[], int.
-// ==========================================================
-struct Midia {
-    int id;                // Identificador único (posição do registro)
-    char titulo[100];      // Título da Mídia (char[])
-    char genero[50];       // Gênero da Mídia (char[])
-    int anoLancamento;     // Ano de Lançamento (int)
-};
+#define MAX_ITENS 100
+#define TAM_NOME 50
 
-// ==========================================================
-// PROTÓTIPOS DE FUNÇÕES (Modularização)
-// ==========================================================
-void limpaBuffer();
-void ler_string_segura(char* destino, int tamanho);
-long tamanho(FILE* arq);
-void cadastrar(FILE* arq);
-void consultar(FILE* arq);
+typedef struct {
+    int id;
+    char nome[TAM_NOME];
+    float preco;
+    int ativo;
+} Item;
+
+
+Item inventario[MAX_ITENS];
+int contador_itens = 0; // Próximo ID a ser usado
+int total_ativos = 0; // Quantidade de itens ativos
+
+
 void menu();
+void cadastrar_item();
+void consultar_item();
+void listar_todos_itens();
+void excluir_item();
+void gerar_relatorio_txt();
+int buscar_indice_por_id(int id);
 
-// ==========================================================
-// FUNÇÃO PRINCIPAL
-// ==========================================================
-int main() {
-    // 2. MÓDULO DE ARQUIVOS
-    // Abrir/Criar um arquivo binário para leitura e escrita.
-    // "r+b": Abre para leitura/escrita. O arquivo deve existir.
-    FILE* arquivo = fopen("midias.bin", "r+b");
 
-    if (arquivo == NULL) {
-        // Se o arquivo não existe, cria um novo ("w+b")
-        arquivo = fopen("midias.bin", "w+b");
-        if (arquivo == NULL) {
-            cerr << "Erro fatal: Não foi possível abrir ou criar o arquivo midias.bin." << endl;
-            return 1; // Sair com código de erro
-        }
-        cout << "Arquivo 'midias.bin' criado com sucesso!" << endl;
-    } else {
-        cout << "Arquivo 'midias.bin' aberto com sucesso!" << endl;
-    }
 
-    int opcao;
 
+void menu() {
+    int escolha;
     do {
-        menu();
-        cout << "Escolha uma opção: ";
-        if (!(cin >> opcao)) {
-            // Lida com entrada não numérica
-            cin.clear();
-            limpaBuffer();
-            opcao = -1; // Opção inválida
-        } else {
-            limpaBuffer();
-        }
+        printf("\n--- MENU DE GERENCIAMENTO DE ITENS ---\n");
+        printf("1. Cadastrar novo item\n");
+        printf("2. Consultar item por ID\n");
+        printf("3. Consultar todos os itens (Lista)\n");
+        printf("4. Excluir item por ID\n");
+        printf("5. Gerar relatório em arquivo .txt\n");
+        printf("0. Sair\n");
+        printf("--------------------------------------\n");
+        printf("Escolha uma opção: ");
+        scanf("%d", &escolha);
+        // Limpar o buffer de entrada
+        while (getchar() != '\n');
 
-        switch (opcao) {
+        switch (escolha) {
             case 1:
-                cadastrar(arquivo);
+                cadastrar_item();
                 break;
             case 2:
-                consultar(arquivo);
+                consultar_item();
                 break;
             case 3:
-                cout << "\nTotal de registros no arquivo: " << tamanho(arquivo) << endl;
+                listar_todos_itens();
+                break;
+            case 4:
+                excluir_item();
+                break;
+            case 5:
+                gerar_relatorio_txt();
                 break;
             case 0:
-                cout << "\nEncerrando o sistema. Até mais!" << endl;
+                printf("\nSaindo do programa. Até logo!\n");
                 break;
             default:
-                cout << "\nOpção inválida. Tente novamente." << endl;
-                break;
+                printf("\nOpção inválida. Tente novamente.\n");
         }
-        cout << "------------------------------------------" << endl;
-    } while (opcao != 0);
+    } while (escolha != 0);
+}
 
-    // Fechar o arquivo ao sair
+
+
+int buscar_indice_por_id(int id) {
+    for (int i = 0; i < contador_itens; i++) {
+        // Verifica se o ID corresponde e se o item está ativo
+        if (inventario[i].id == id && inventario[i].ativo == 1) {
+            return i;
+        }
+    }
+    return -1; // Não encontrado
+}
+
+
+void cadastrar_item() {
+    if (total_ativos >= MAX_ITENS) {
+        printf("\nERRO: Limite máximo de %d itens atingido.\n", MAX_ITENS);
+        return;
+    }
+
+    Item novo;
+
+    // O ID é gerado automaticamente
+    novo.id = contador_itens + 1;
+
+    printf("\n--- CADASTRO DE NOVO ITEM ---\n");
+    printf("Nome do item (máx %d caracteres): ", TAM_NOME - 1);
+    // fgets é mais seguro para ler strings com espaços
+    if (fgets(novo.nome, TAM_NOME, stdin) == NULL) {
+        printf("\nERRO de leitura do nome.\n");
+        return;
+    }
+    // Remove o '\n' lido pelo fgets, se presente
+    novo.nome[strcspn(novo.nome, "\n")] = 0;
+
+    printf("Preço do item: ");
+    // Verifica se a leitura do float foi bem-sucedida
+    if (scanf("%f", &novo.preco) != 1) {
+        printf("\nERRO: Entrada de preço inválida. Tente novamente.\n");
+        while (getchar() != '\n'); // Limpa buffer
+        return;
+    }
+    while (getchar() != '\n'); // Limpa buffer
+
+    novo.ativo = 1; // Item ativo
+
+    // Armazena no "banco de dados" (array)
+    inventario[contador_itens] = novo;
+    printf("\n✅ Item cadastrado com sucesso! ID: %d\n", novo.id);
+
+    contador_itens++;
+    total_ativos++;
+}
+
+
+void consultar_item() {
+    int id_busca;
+    printf("\n--- CONSULTAR ITEM POR ID ---\n");
+    printf("Digite o ID do item: ");
+    if (scanf("%d", &id_busca) != 1) {
+        printf("\nERRO: Entrada de ID inválida.\n");
+        while (getchar() != '\n');
+        return;
+    }
+    while (getchar() != '\n');
+
+    int indice = buscar_indice_por_id(id_busca);
+
+    if (indice != -1) {
+        Item item = inventario[indice];
+        printf("\n--- DADOS DO ITEM ID: %d ---\n", item.id);
+        printf("Nome: %s\n", item.nome);
+        printf("Preço: R$ %.2f\n", item.preco);
+        printf("Status: Ativo\n");
+        printf("---------------------------\n");
+    } else {
+        printf("\n❌ Item com ID %d não encontrado ou excluído.\n", id_busca);
+    }
+}
+
+
+
+void listar_todos_itens() {
+    if (total_ativos == 0) {
+        printf("\nO inventário está vazio. Nenhum item ativo para listar.\n");
+        return;
+    }
+
+    printf("\n--- LISTA DE TODOS OS ITENS ATIVOS (%d itens) ---\n", total_ativos);
+    printf("ID  | Nome%*s | Preço\n", TAM_NOME - 4, " "); // Formatação de cabeçalho
+    printf("----|-%*s-|--------\n", TAM_NOME - 2, " ");
+
+    int encontrado = 0;
+    for (int i = 0; i < contador_itens; i++) {
+        if (inventario[i].ativo == 1) {
+            Item item = inventario[i];
+            printf("%-4d| %-*s | R$ %.2f\n", item.id, TAM_NOME - 2, item.nome, item.preco);
+            encontrado++;
+        }
+    }
+    printf("--------------------------------------------------\n");
+}
+
+
+
+void excluir_item() {
+    int id_excluir;
+    printf("\n--- EXCLUIR ITEM POR ID ---\n");
+    printf("Digite o ID do item a ser excluído: ");
+    if (scanf("%d", &id_excluir) != 1) {
+        printf("\nERRO: Entrada de ID inválida.\n");
+        while (getchar() != '\n');
+        return;
+    }
+    while (getchar() != '\n');
+
+    int indice = buscar_indice_por_id(id_excluir);
+
+    if (indice != -1) {
+        // Exclusão LÓGICA: marca o item como inativo
+        inventario[indice].ativo = 0;
+        total_ativos--;
+        printf("\n✅ Item ID %d ('%s') excluído (marcado como inativo) com sucesso.\n",
+               id_excluir, inventario[indice].nome);
+    } else {
+        printf("\n❌ Item com ID %d não encontrado ou já excluído.\n", id_excluir);
+    }
+}
+
+
+void gerar_relatorio_txt() {
+    FILE *arquivo;
+    const char *nome_arquivo = "relatorio_inventario.txt";
+
+    // Abre o arquivo para escrita (w)
+    arquivo = fopen(nome_arquivo, "w");
+
+    if (arquivo == NULL) {
+        printf("\nERRO: Não foi possível abrir o arquivo '%s' para escrita.\n", nome_arquivo);
+        return;
+    }
+
+
+    fprintf(arquivo, "==========================================\n");
+    fprintf(arquivo, "RELATÓRIO DE ITENS ATIVOS NO INVENTÁRIO\n");
+    fprintf(arquivo, "TOTAL DE ITENS ATIVOS: %d\n", total_ativos);
+    fprintf(arquivo, "==========================================\n\n");
+    fprintf(arquivo, "ID  | Nome%*s | Preço\n", TAM_NOME - 4, " ");
+    fprintf(arquivo, "----|-%*s-|--------\n", TAM_NOME - 2, " ");
+
+    int itens_salvos = 0;
+
+    for (int i = 0; i < contador_itens; i++) {
+
+        if (inventario[i].ativo == 1) {
+            Item item = inventario[i];
+            fprintf(arquivo, "%-4d| %-*s | R$ %.2f\n", item.id, TAM_NOME - 2, item.nome, item.preco);
+            itens_salvos++;
+        }
+    }
+
+
     fclose(arquivo);
 
+    printf("\n✅ Relatório gerado com sucesso!\n");
+    printf("Arquivo salvo como: **%s** (%d itens registrados).\n", nome_arquivo, itens_salvos);
+}
+
+
+int main() {
+    menu();
     return 0;
-}
-
-// ==========================================================
-// IMPLEMENTAÇÃO DAS FUNÇÕES AUXILIARES
-// ==========================================================
-
-// Padronização de Nomenclatura: limpaBuffer()
-void limpaBuffer() {
-    int c;
-    while ((c = getchar()) != '\n' && c != EOF);
-}
-
-// Requisito Opcional: Leitura de String Segura com fgets() e strcspn()
-void ler_string_segura(char* destino, int tamanho) {
-    if (fgets(destino, tamanho, stdin) != NULL) {
-        // Remover o '\n' deixado pelo fgets
-        destino[strcspn(destino, "\n")] = 0;
-    }
-}
-
-// ==========================================================
-// IMPLEMENTAÇÃO DAS FUNÇÕES DE NEGÓCIO
-// ==========================================================
-
-// tamanho(): Calcula e retorna o número total de registros
-long tamanho(FILE* arq) {
-    if (arq == NULL) {
-        return 0;
-    }
-
-    // Posiciona o ponteiro no final do arquivo (SEEK_END)
-    fseek(arq, 0, SEEK_END);
-
-    // Obtém a posição atual (que é o tamanho total em bytes)
-    long tamanho_bytes = ftell(arq);
-
-    // Calcula o número de registros dividindo pelo tamanho da struct
-    long num_registros = tamanho_bytes / sizeof(Midia);
-
-    // Volta o ponteiro para o início para futuras operações
-    fseek(arq, 0, SEEK_SET);
-
-    return num_registros;
-}
-
-// cadastrar(): Lê dados do usuário e salva no final do arquivo
-void cadastrar(FILE* arq) {
-    Midia novaMidia;
-
-    // Obtém o próximo ID, que é o número de registros atual + 1
-    long total = tamanho(arq);
-    novaMidia.id = (int)total + 1;
-
-    cout << "\n--- CADASTRO DE NOVA MÍDIA ---" << endl;
-    cout << "ID do Registro: " << novaMidia.id << endl;
-
-    cout << "Título: ";
-    ler_string_segura(novaMidia.titulo, sizeof(novaMidia.titulo));
-
-    cout << "Gênero: ";
-    ler_string_segura(novaMidia.genero, sizeof(novaMidia.genero));
-
-    cout << "Ano de Lançamento (Ex: 2023): ";
-    // Leitura simples de int, assumindo que limpaBuffer já foi chamada
-    while (!(cin >> novaMidia.anoLancamento)) {
-        cout << "Entrada inválida. Digite um número para o ano: ";
-        cin.clear();
-        limpaBuffer();
-    }
-    limpaBuffer(); // Limpar buffer após a leitura do inteiro
-
-    // Posiciona o ponteiro no final do arquivo (SEEK_END)
-    fseek(arq, 0, SEEK_END);
-
-    // Salva a struct no final do arquivo (fwrite)
-    if (fwrite(&novaMidia, sizeof(Midia), 1, arq) == 1) {
-        cout << "\n Mídia '" << novaMidia.titulo << "' cadastrada com sucesso! (ID: " << novaMidia.id << ")" << endl;
-    } else {
-        cerr << "\n Erro ao salvar a mídia no arquivo." << endl;
-    }
-
-    // Garante que os dados sejam escritos no disco
-    fflush(arq);
-}
-
-// consultar(): Solicita código (posição) e exibe o registro
-void consultar(FILE* arq) {
-    long total = tamanho(arq);
-    if (total == 0) {
-        cout << "\nNão há registros no arquivo para consultar." << endl;
-        return;
-    }
-
-    int idConsulta;
-    cout << "\n--- CONSULTA DE MÍDIA ---" << endl;
-    cout << "Digite o ID (posição de 1 a " << total << ") do registro: ";
-
-    if (!(cin >> idConsulta)) {
-        cout << "Entrada inválida." << endl;
-        cin.clear();
-        limpaBuffer();
-        return;
-    }
-    limpaBuffer(); // Limpar buffer
-
-    if (idConsulta < 1 || idConsulta > total) {
-        cout << "\nID inválido. Deve estar entre 1 e " << total << "." << endl;
-        return;
-    }
-
-    Midia midiaConsultada;
-
-    // Calcula o deslocamento (offset) em bytes
-    long offset = (long)(idConsulta - 1) * sizeof(Midia);
-
-    // Posiciona o ponteiro no registro desejado (SEEK_SET)
-    fseek(arq, offset, SEEK_SET);
-
-    // Lê o registro (fread)
-    if (fread(&midiaConsultada, sizeof(Midia), 1, arq) == 1) {
-        cout << "\n--- DADOS DA MÍDIA (ID: " << midiaConsultada.id << ") ---" << endl;
-        cout << "  Título: " << midiaConsultada.titulo << endl;
-        cout << "  Gênero: " << midiaConsultada.genero << endl;
-        cout << "  Ano:    " << midiaConsultada.anoLancamento << endl;
-    } else {
-        cerr << "\n Erro ao ler o registro no ID " << idConsulta << "." << endl;
-    }
-}
-
-// Função de menu
-void menu() {
-    cout << "\n=== SISTEMA DE COLEÇÃO DE MÍDIAS ===" << endl;
-    cout << "1. Cadastrar nova Mídia" << endl;
-    cout << "2. Consultar Mídia por ID" << endl;
-    cout << "3. Exibir Total de Registros" << endl;
-    cout << "0. Sair" << endl;
-    cout << "====================================" << endl;
 }
